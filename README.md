@@ -63,3 +63,139 @@ This separation allows better scalability, improved performance, and enhanced se
 ![](https://paper-attachments.dropboxusercontent.com/s_2F3D3E9526748A0D70829C44D40E6D0C1E690F6ED411792DBD3EF07A3CFF11E2_1743743877671_image.png)
 
 
+## CQRS Implementation in Spring Boot
+
+### Overview
+
+CQRS (Command Query Responsibility Segregation) separates read and write operations into distinct models:
+- Command Model (Write Model): Handles operations that modify data.
+- Query Model (Read Model): Handles operations that retrieve data.
+
+In this implementation, we'll create a Spring Boot Order Management System using CQRS.
+
+### Project Structure
+
+```
+order-service-cqrs
+│── src/main/java/com/example/cqrs
+│   ├── command/           # Write model (commands)
+│   │   ├── controller/    # REST API for commands
+│   │   ├── service/       # Business logic for commands
+│   │   ├── entity/        # Command-side entity
+│   │   ├── repository/    # Command-side repository
+│   │   ├── event/         # Events for propagating changes
+│   ├── query/             # Read model (queries)
+│   │   ├── controller/    # REST API for queries
+│   │   ├── service/       # Business logic for queries
+│   │   ├── entity/        # Query-side entity
+│   │   ├── repository/    # Query-side repository
+│   ├── CqrsOrderServiceApplication.java
+│   ├── application.yml    # Spring configuration
+└── pom.xml                # Dependencies
+```
+### Command Side (Write Model)
+
+**Order Entity**
+```java
+package com.example.cqrs.command.entity;
+
+import jakarta.persistence.*;
+import lombok.*;
+
+@Entity
+@Table(name = "orders")
+@Getter @Setter
+@AllArgsConstructor @NoArgsConstructor
+public class Order {
+    
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private String product;
+    private Integer quantity;
+    private Double price;
+}
+```
+
+**Order Created Event**
+```java
+package com.example.cqrs.command.event;
+
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+
+@Getter
+@AllArgsConstructor
+public class OrderCreatedEvent {
+    private Long orderId;
+    private String product;
+    private Integer quantity;
+    private Double price;
+}
+```
+
+**Order Repository**
+```java
+package com.example.cqrs.command.repository;
+
+import com.example.cqrs.command.entity.Order;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface OrderRepository extends JpaRepository<Order, Long> {
+}
+```
+
+**Order Service**
+```java
+package com.example.cqrs.command.service;
+
+import com.example.cqrs.command.entity.Order;
+import com.example.cqrs.command.event.OrderCreatedEvent;
+import com.example.cqrs.command.repository.OrderRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.stereotype.Service;
+
+@Service
+@RequiredArgsConstructor
+public class OrderService {
+
+    private final OrderRepository orderRepository;
+    private final ApplicationEventPublisher eventPublisher;
+
+    public Order createOrder(Order order) {
+        Order savedOrder = orderRepository.save(order);
+        eventPublisher.publishEvent(new OrderCreatedEvent(
+                savedOrder.getId(), 
+                savedOrder.getProduct(), 
+                savedOrder.getQuantity(), 
+                savedOrder.getPrice()
+        ));
+        return savedOrder;
+    }
+}
+```
+
+**Order Controller**
+```java
+package com.example.cqrs.command.controller;
+
+import com.example.cqrs.command.entity.Order;
+import com.example.cqrs.command.service.OrderService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/orders")
+@RequiredArgsConstructor
+public class OrderCommandController {
+
+    private final OrderService orderService;
+
+    @PostMapping
+    public Order createOrder(@RequestBody Order order) {
+        return orderService.createOrder(order);
+    }
+}
+```
