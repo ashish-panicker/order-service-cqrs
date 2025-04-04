@@ -199,3 +199,97 @@ public class OrderCommandController {
     }
 }
 ```
+### Query Side (Read Model)
+
+**Query Side Entity**
+```java
+package com.example.cqrs.query.entity;
+
+import jakarta.persistence.*;
+import lombok.*;
+
+@Entity
+@Table(name = "orders_read")
+@Getter @Setter
+@AllArgsConstructor @NoArgsConstructor
+public class OrderReadModel {
+
+    @Id
+    private Long id;
+    private String product;
+    private Integer quantity;
+    private Double price;
+}
+```
+
+**Query Side Repository**
+```java
+package com.example.cqrs.query.repository;
+
+import com.example.cqrs.query.entity.OrderReadModel;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface OrderReadRepository extends JpaRepository<OrderReadModel, Long> {
+}
+```
+
+**Query Side Service**
+```java
+package com.example.cqrs.query.service;
+
+import com.example.cqrs.command.event.OrderCreatedEvent;
+import com.example.cqrs.query.entity.OrderReadModel;
+import com.example.cqrs.query.repository.OrderReadRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.context.event.EventListener;
+import org.springframework.stereotype.Service;
+
+@Service
+@RequiredArgsConstructor
+public class OrderQueryService {
+
+    private final OrderReadRepository orderReadRepository;
+
+    @EventListener
+    public void handleOrderCreated(OrderCreatedEvent event) {
+        OrderReadModel orderReadModel = new OrderReadModel(
+                event.getOrderId(),
+                event.getProduct(),
+                event.getQuantity(),
+                event.getPrice()
+        );
+        orderReadRepository.save(orderReadModel);
+    }
+}
+```
+
+**Query Controller**
+
+```java
+package com.example.cqrs.query.controller;
+
+import com.example.cqrs.query.entity.OrderReadModel;
+import com.example.cqrs.query.repository.OrderReadRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/orders")
+@RequiredArgsConstructor
+public class OrderQueryController {
+
+    private final OrderReadRepository orderReadRepository;
+
+    @GetMapping
+    public List<OrderReadModel> getAllOrders() {
+        return orderReadRepository.findAll();
+    }
+
+    @GetMapping("/{id}")
+    public OrderReadModel getOrderById(@PathVariable Long id) {
+        return orderReadRepository.findById(id).orElseThrow();
+    }
+}
+```
